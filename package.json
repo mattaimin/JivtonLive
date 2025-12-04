@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "agora-rtc-sdk-ng": "^4.24.1",
+    "agora-rtm-sdk": "^1.5.1",
+    "agora-token": "^2.0.5",
     "next": "16.0.7",
     "react": "19.2.0",
     "react-dom": "19.2.0"
