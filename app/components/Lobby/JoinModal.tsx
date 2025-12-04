@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { RoomConfig } from '@/types';
 import { AVATARS } from '@/config/rooms';
-import { t } from '@/utils/i18n';
 
 interface Props {
   room: RoomConfig;
@@ -27,21 +26,26 @@ export default function JoinModal({ room, onClose }: Props) {
   }, []);
 
   const handleJoin = () => {
+    // 1. Validate Password
     if (room.password && password !== room.password) {
-      setError(t.incorrectPass);
+      setError('Incorrect Password');
       return;
     }
     if (!username.trim()) {
-      setError(t.enterName);
+      setError('Please enter a nickname');
       return;
     }
 
+    // 2. Save Identity
     localStorage.setItem('agora-party-username', username);
     localStorage.setItem('agora-party-avatar', selectedAvatar);
 
+    // 3. Navigate to Room
+    // FIX: We now pass the 'password' as a 'key' in the URL so the page can verify it
     const params = new URLSearchParams({
       name: username,
-      avatar: selectedAvatar
+      avatar: selectedAvatar,
+      key: password // <--- SEND KEY
     });
     router.push(`/room/${room.id}?${params.toString()}`);
   };
@@ -66,8 +70,9 @@ export default function JoinModal({ room, onClose }: Props) {
         </div>
 
         <div className="p-6 space-y-6">
+          
           <div>
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">{t.chooseAvatar}</label>
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">Choose Avatar</label>
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
               {AVATARS.map(av => (
                 <button
@@ -88,25 +93,26 @@ export default function JoinModal({ room, onClose }: Props) {
 
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">{t.nickname}</label>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Nickname</label>
               <input 
                 type="text" 
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-4 py-3 text-white focus:outline-none transition"
                 placeholder="CyberPunk_01"
+                style={{ borderColor: '#333' }} 
               />
             </div>
 
             {room.password && (
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">{t.roomPass}</label>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Room Password</label>
                 <input 
                   type="password" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-4 py-3 text-white focus:outline-none transition"
-                  placeholder={t.enterPass}
+                  placeholder="Enter code..."
                 />
               </div>
             )}
@@ -121,7 +127,7 @@ export default function JoinModal({ room, onClose }: Props) {
               background: `linear-gradient(to right, ${room.theme.primaryColor}, ${room.theme.accentColor})` 
             }}
           >
-            {t.enterRoom}
+            ENTER ROOM
           </button>
 
         </div>
