@@ -62,6 +62,8 @@ export default function GameTable({ localUser, remoteUsers, userInfo, gameState,
              avatar={userInfo[opponent.uid.toString()]?.avatar || "👤"}
              isLocal={false}
              isActive={isOpponentTurn}
+             // Check if opponent is winner
+             isWinner={gameState.phase === 'revealed' && gameState.winnerUid === opponent.uid.toString()}
              className="scale-90"
              dice={gameState.phase === 'revealed' ? gameState.dice[opponent.uid.toString()] : undefined}
              diceCount={gameState.dice[opponent.uid.toString()]?.length}
@@ -74,10 +76,8 @@ export default function GameTable({ localUser, remoteUsers, userInfo, gameState,
         )}
       </div>
 
-      {/* --- MIDDLE: GAME BOARD --- */}
+      {/* --- CENTER BOARD --- */}
       <div className="flex-1 flex flex-col items-center justify-center z-20 relative">
-         
-         {/* Main Board UI */}
          <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-4 w-full max-w-[300px] shadow-2xl mb-20 relative z-10">
             
             {gameState.phase === 'idle' && (
@@ -85,11 +85,9 @@ export default function GameTable({ localUser, remoteUsers, userInfo, gameState,
                  <div className="text-5xl mb-2">🎲</div>
                  <h3 className="text-xl font-bold text-white mb-4">{t.gameName}</h3>
                  {opponent ? (
-                    <button onClick={onStartGame} className="w-full py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl transition shadow-[0_0_15px_rgba(6,182,212,0.5)]">
-                      {t.startGame}
-                    </button>
+                    <button onClick={onStartGame} className="w-full py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl transition shadow-[0_0_15px_rgba(6,182,212,0.5)]">{t.startGame}</button>
                  ) : (
-                    <p className="text-gray-400 text-xs">等待玩家...</p>
+                    <p className="text-gray-400 text-xs">Waiting for player to join...</p>
                  )}
               </div>
             )}
@@ -128,14 +126,8 @@ export default function GameTable({ localUser, remoteUsers, userInfo, gameState,
                          </div>
 
                          <div className="flex gap-2">
-                             {lastBid && (
-                               <button onClick={onChallenge} className="flex-1 py-3 bg-red-500/90 hover:bg-red-500 text-white font-bold rounded-xl shadow-lg transition">
-                                 {t.liar}
-                               </button>
-                             )}
-                             <button onClick={handleBidClick} className="flex-[2] py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl shadow-lg transition">
-                               {t.bidBtn}
-                             </button>
+                             {lastBid && <button onClick={onChallenge} className="flex-1 py-3 bg-red-500/90 hover:bg-red-500 text-white font-bold rounded-xl shadow-lg transition">{t.liar}</button>}
+                             <button onClick={handleBidClick} className="flex-[2] py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl shadow-lg transition">{t.bidBtn}</button>
                          </div>
                      </div>
                  ) : (
@@ -151,16 +143,14 @@ export default function GameTable({ localUser, remoteUsers, userInfo, gameState,
                 <div className="text-center">
                     <h3 className="text-xl font-black text-white mb-2">{t.roundOver}</h3>
                     <p className="text-sm text-cyan-300 mb-4 leading-relaxed">{gameState.resultMessage}</p>
-                    <button onClick={onStartGame} className="w-full py-3 bg-white text-black font-bold rounded-xl hover:scale-105 transition shadow-lg">
-                      {t.nextRound}
-                    </button>
+                    <button onClick={onStartGame} className="w-full py-3 bg-white text-black font-bold rounded-xl hover:scale-105 transition shadow-lg">{t.nextRound}</button>
                 </div>
             )}
          </div>
 
-         {/* FIX: MOVED "MY HAND" HERE (Center Bottom, separate from player video) */}
+         {/* MY HAND (Bottom Center) */}
          {localUser && gameState.dice[localUser.uid] && gameState.phase === 'playing' && (
-           <div className="absolute -bottom-10 bg-black/80 px-4 py-3 rounded-t-2xl border-t border-x border-cyan-500/30 shadow-[0_-5px_20px_rgba(0,243,255,0.2)] z-30 transition-transform hover:-translate-y-2">
+           <div className="absolute -bottom-10 bg-black/80 px-4 py-3 rounded-t-2xl border-t border-x border-cyan-500/30 shadow-[0_-5px_20px_rgba(0,243,255,0.2)] z-30">
               <p className="text-[9px] text-cyan-400 text-center mb-1 uppercase tracking-widest">{t.yourHand}</p>
               <div className="flex justify-center gap-2">
                 {gameState.dice[localUser.uid].map((d, i) => (
@@ -180,7 +170,8 @@ export default function GameTable({ localUser, remoteUsers, userInfo, gameState,
               avatar={localUser.avatar}
               isLocal={true}
               isActive={isMyTurn}
-              // Only show dice in seat if revealed (otherwise they are in the dedicated "My Hand" tray)
+              // Check if I am winner
+              isWinner={gameState.phase === 'revealed' && gameState.winnerUid === localUser.uid}
               dice={gameState.phase === 'revealed' ? gameState.dice[localUser.uid] : undefined}
               diceCount={0} 
             />

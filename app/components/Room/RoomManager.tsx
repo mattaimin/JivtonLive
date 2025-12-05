@@ -26,6 +26,7 @@ export interface GameState {
   currentTurnUid: string;
   lastBid: Bid | null;
   resultMessage?: string;
+  winnerUid?: string; // NEW: Track the winner
 }
 
 export type UserInfoMap = Record<string, { username: string; avatar: string }>;
@@ -52,9 +53,6 @@ export default function RoomManager({ room, username, avatar }: Props) {
     currentTurnUid: '',
     lastBid: null
   });
-  // Ref to access state inside event listeners
-  const gameStateRef = useRef(gameState);
-  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
 
   const getAllPlayerIds = () => {
     if (!localUid) return [];
@@ -110,15 +108,6 @@ export default function RoomManager({ room, username, avatar }: Props) {
 
         client.current.on('user-left', (user) => {
           setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
-          
-          // STOP GAME if opponent leaves
-          if (gameStateRef.current.phase === 'playing') {
-             setGameState(prev => ({
-                 ...prev,
-                 phase: 'revealed',
-                 resultMessage: "对手已离开，游戏结束。请等待玩家返回。(Opponent left. Game Over. Please wait.)"
-             }));
-          }
         });
 
         const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID!;
@@ -151,7 +140,8 @@ export default function RoomManager({ room, username, avatar }: Props) {
                     dice: {}, 
                     currentTurnUid: allIds[0],
                     lastBid: null,
-                    resultMessage: undefined
+                    resultMessage: undefined,
+                    winnerUid: undefined
                 });
                 handleRollDice(uidStr);
             } 
@@ -178,7 +168,8 @@ export default function RoomManager({ room, username, avatar }: Props) {
                 setGameState(prev => ({
                     ...prev,
                     phase: 'revealed',
-                    resultMessage: text
+                    resultMessage: text,
+                    winnerUid: data.winnerUid // NEW: Sync Winner
                 }));
             }
         });
@@ -198,7 +189,6 @@ export default function RoomManager({ room, username, avatar }: Props) {
             setLocalVideoTrack(cam);
             await client.current.publish([mic, cam]);
         } catch (mediaErr: any) {
-            // This catches the permission error and triggers the UI popup
             console.warn("Media permission failed:", mediaErr);
             if (mediaErr.code === 'PERMISSION_DENIED' || mediaErr.name === 'NotAllowedError') {
                setPermissionError(true);
@@ -245,18 +235,6 @@ export default function RoomManager({ room, username, avatar }: Props) {
   };
 
   const handleStartGame = async () => {
-      // Ensure we have opponents to play with
-      if (remoteUsers.length === 0) {
-          setGameState({
-            phase: 'idle',
-            dice: {},
-            currentTurnUid: '',
-            lastBid: null,
-            resultMessage: undefined
-          });
-          return;
-      }
-
       const remoteIds = remoteUsers.map(u => u.uid.toString());
       const allIds = [localUid, ...remoteIds].sort();
       
@@ -267,7 +245,8 @@ export default function RoomManager({ room, username, avatar }: Props) {
         phase: 'playing',
         dice: {},
         currentTurnUid: allIds[0],
-        lastBid: null
+        lastBid: null,
+        winnerUid: undefined
       });
       
       handleRollDice(localUid);
@@ -312,7 +291,10 @@ export default function RoomManager({ room, username, avatar }: Props) {
       const bid = gameState.lastBid;
       const success = totalCount < bid.quantity; 
       
-      const loserName = success ? (userInfo[bid.uid]?.username || 'Bidder') : username;
+      const loserId = success ? bid.uid : localUid;
+      const winnerId = success ? localUid : bid.uid; // If I challenged and won, I win. If failed, Bidder wins.
+
+      const loserName = (loserId === localUid ? username : (userInfo[loserId]?.username || 'Player'));
       const resultText = success 
         ? t.challengeWon(totalCount, bid.face, loserName)
         : t.challengeLost(totalCount, bid.face, loserName);
@@ -322,14 +304,16 @@ export default function RoomManager({ room, username, avatar }: Props) {
           success, 
           total: totalCount, 
           face: bid.face, 
-          loserName 
+          loserName,
+          winnerUid: winnerId // Send winner ID
       });
       await rtmChannel.current?.sendMessage({ text: msg });
 
       setGameState(prev => ({
           ...prev,
           phase: 'revealed',
-          resultMessage: resultText
+          resultMessage: resultText,
+          winnerUid: winnerId
       }));
   };
 
@@ -338,7 +322,6 @@ export default function RoomManager({ room, username, avatar }: Props) {
       <div className="absolute inset-0 bg-cover bg-center opacity-50" style={{ backgroundImage: `url(${room.theme.backgroundUrl})` }} />
       <audio ref={audioRef} src={room.theme.audioUrl} loop className="hidden" />
 
-      {/* Permission Denied Modal (Chinese) */}
       {permissionError && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-6">
           <div className="bg-[#1F1F1F] p-6 rounded-2xl border border-red-500/30 shadow-2xl max-w-sm text-center">
@@ -347,18 +330,12 @@ export default function RoomManager({ room, username, avatar }: Props) {
              </div>
              <h3 className="text-xl font-bold text-white mb-2">需要摄像头权限</h3>
              <p className="text-gray-400 text-sm mb-6">请在浏览器设置中允许访问摄像头以加入游戏。</p>
-             <button 
-               onClick={() => window.location.reload()}
-               className="w-full py-3 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition"
-             >
-               刷新页面
-             </button>
+             <button onClick={() => window.location.reload()} className="w-full py-3 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition">刷新页面</button>
           </div>
         </div>
       )}
 
       <div className="relative z-10 w-full h-full flex flex-col">
-        
         <div className="p-4 flex justify-between items-start">
            <div>
              <h1 className="text-2xl font-black text-white drop-shadow-lg">{room.name}</h1>
@@ -369,16 +346,10 @@ export default function RoomManager({ room, username, avatar }: Props) {
            </div>
            
            <div className="flex gap-2">
-              <button 
-                onClick={toggleMusic}
-                className={`px-3 py-1.5 border rounded-lg font-bold text-xs transition ${isMusicPlaying ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400' : 'bg-gray-800/50 border-gray-600 text-gray-400'}`}
-              >
+              <button onClick={toggleMusic} className={`px-3 py-1.5 border rounded-lg font-bold text-xs transition ${isMusicPlaying ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400' : 'bg-gray-800/50 border-gray-600 text-gray-400'}`}>
                 {isMusicPlaying ? '🎵 ON' : '🎵 OFF'}
               </button>
-
-              <button onClick={() => window.location.href = '/'} className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/40 border border-red-500 text-red-500 text-xs rounded-lg font-bold transition">
-                {t.leaveRoom}
-              </button>
+              <button onClick={() => window.location.href = '/'} className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/40 border border-red-500 text-red-500 text-xs rounded-lg font-bold transition">{t.leaveRoom}</button>
            </div>
         </div>
 
