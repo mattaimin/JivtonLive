@@ -87,7 +87,7 @@ export default function GameTable({ localUser, remoteUsers, userInfo, gameState,
                  {opponent ? (
                     <button onClick={onStartGame} className="w-full py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl transition shadow-[0_0_15px_rgba(6,182,212,0.5)]">{t.startGame}</button>
                  ) : (
-                    <p className="text-gray-400 text-xs">Waiting for player to join...</p>
+                    <p className="text-gray-400 text-xs">等待玩家加入...</p>
                  )}
               </div>
             )}

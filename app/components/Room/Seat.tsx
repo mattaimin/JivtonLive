@@ -10,7 +10,7 @@ interface Props {
   avatar?: string;
   isLocal?: boolean;
   isActive?: boolean; 
-  isWinner?: boolean; // NEW: Winner prop
+  isWinner?: boolean;
   className?: string;
   diceCount?: number;
   dice?: number[];
@@ -26,11 +26,9 @@ export default function Seat({ user, label, avatar, isLocal, isActive, isWinner,
     }
   }, [user]);
 
-  // Play sound when user becomes winner
   useEffect(() => {
     if (isWinner && audioRef.current) {
         audioRef.current.volume = 0.5;
-        // Play sound (catch error if user hasn't interacted with page yet)
         audioRef.current.play().catch(e => console.warn("Win sound blocked", e));
     }
   }, [isWinner]);
@@ -41,10 +39,9 @@ export default function Seat({ user, label, avatar, isLocal, isActive, isWinner,
   return (
     <div className={`absolute flex flex-col items-center gap-2 w-24 md:w-32 transition-all duration-500 ${className} ${isActive || isWinner ? 'scale-110 z-30' : 'z-10'}`}>
       
-      {/* Victory Sound */}
       <audio ref={audioRef} src="https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3" />
 
-      {/* WINNER CROWN ANIMATION */}
+      {/* WINNER CROWN */}
       {isWinner && (
         <div className="absolute -top-16 flex flex-col items-center animate-bounce z-50">
            <span className="text-5xl filter drop-shadow-lg">👑</span>
@@ -61,7 +58,7 @@ export default function Seat({ user, label, avatar, isLocal, isActive, isWinner,
          </div>
       )}
 
-      {/* HIDDEN DICE INDICATOR */}
+      {/* HIDDEN DICE */}
       {!dice && (diceCount || 0) > 0 && !isLocal && (
         <div className="absolute -top-8 flex gap-1 animate-bounce">
           {Array.from({ length: diceCount || 0 }).map((_, i) => (
@@ -70,27 +67,34 @@ export default function Seat({ user, label, avatar, isLocal, isActive, isWinner,
         </div>
       )}
 
-      {/* ACTIVE TURN INDICATOR */}
+      {/* THINKING BADGE */}
       {isActive && !isLocal && (
           <div className="absolute -bottom-12 text-cyan-400 font-bold text-xs bg-black/80 px-2 py-1 rounded animate-pulse border border-cyan-500/30 whitespace-nowrap">
               {t.thinking}
           </div>
       )}
 
-      {/* CIRCLE CONTAINER (Add Gold Border if Winner) */}
+      {/* SEAT CIRCLE */}
       <div className={`relative w-20 h-20 md:w-24 md:h-24 rounded-full border-4 ${isWinner ? 'border-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.6)]' : (isActive ? 'border-cyan-400 shadow-[0_0_20px_rgba(0,243,255,0.6)]' : (isLocal ? 'border-white/50' : 'border-white/10'))} bg-gray-900 backdrop-blur-sm overflow-hidden group transition-all duration-500`}>
         
+        {/* Background Avatar */}
         <div className="absolute inset-0 z-0 flex items-center justify-center text-4xl md:text-5xl select-none">
           {displayAvatar}
         </div>
 
+        {/* Video Feed */}
         {showVideo && (
            <div ref={videoRef} className="absolute inset-0 w-full h-full object-cover bg-black z-10" />
         )}
       </div>
 
-      {/* NAME TAG */}
-      <div className={`px-3 py-1 rounded-full backdrop-blur-md border ${isActive || isWinner ? 'bg-black/80 border-white/40' : 'bg-black/60 border-white/10'}`}>
+      {/* NAME TAG + AVATAR */}
+      <div className={`px-3 py-1 rounded-full backdrop-blur-md border flex items-center gap-1.5 ${isActive || isWinner ? 'bg-black/80 border-white/40' : 'bg-black/60 border-white/10'}`}>
+        {/* RESTORED: Avatar beside name */}
+        <span className="text-sm select-none leading-none filter drop-shadow-md">
+          {displayAvatar}
+        </span>
+        
         <span className={`text-xs font-bold ${isLocal ? 'text-cyan-400' : 'text-white'}`}>
           {label || t.emptySeat}
         </span>

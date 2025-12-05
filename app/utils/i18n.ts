@@ -43,6 +43,7 @@ export const t = {
   liar: LANG === 'zh' ? "开！" : "LIAR!",
   bidBtn: LANG === 'zh' ? "叫价" : "BID",
   waitingOpponent: LANG === 'zh' ? "等待对手..." : "Waiting for opponent...",
+  waitingPlayerJoin: LANG === 'zh' ? "等待玩家加入..." : "Waiting for player to join...",
   roundOver: LANG === 'zh' ? "本轮结束" : "ROUND OVER",
   nextRound: LANG === 'zh' ? "下一轮" : "NEXT ROUND",
   thinking: LANG === 'zh' ? "思考中..." : "Thinking...",

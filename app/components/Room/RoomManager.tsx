@@ -26,7 +26,7 @@ export interface GameState {
   currentTurnUid: string;
   lastBid: Bid | null;
   resultMessage?: string;
-  winnerUid?: string; // NEW: Track the winner
+  winnerUid?: string;
 }
 
 export type UserInfoMap = Record<string, { username: string; avatar: string }>;
@@ -53,6 +53,14 @@ export default function RoomManager({ room, username, avatar }: Props) {
     currentTurnUid: '',
     lastBid: null
   });
+
+  // CRITICAL: Ref to access state inside event listeners without stale closures
+  const gameStateRef = useRef(gameState);
+  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
+
+  // CRITICAL: Ref to access remoteUsers inside event listeners
+  const remoteUsersRef = useRef(remoteUsers);
+  useEffect(() => { remoteUsersRef.current = remoteUsers; }, [remoteUsers]);
 
   const getAllPlayerIds = () => {
     if (!localUid) return [];
@@ -106,8 +114,20 @@ export default function RoomManager({ room, username, avatar }: Props) {
           }
         });
 
+        // FIX: Auto-win logic when user leaves
         client.current.on('user-left', (user) => {
           setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
+          
+          // If we were playing, end the game immediately
+          if (gameStateRef.current.phase === 'playing') {
+             setGameState(prev => ({
+                 ...prev,
+                 phase: 'revealed',
+                 // Update message to indicate opponent left
+                 resultMessage: "对手已断开连接。你赢了！(Opponent disconnected. You Win!)",
+                 winnerUid: localUid // Local user wins by default
+             }));
+          }
         });
 
         const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID!;
@@ -169,7 +189,7 @@ export default function RoomManager({ room, username, avatar }: Props) {
                     ...prev,
                     phase: 'revealed',
                     resultMessage: text,
-                    winnerUid: data.winnerUid // NEW: Sync Winner
+                    winnerUid: data.winnerUid
                 }));
             }
         });
@@ -235,6 +255,18 @@ export default function RoomManager({ room, username, avatar }: Props) {
   };
 
   const handleStartGame = async () => {
+      // FIX: If opponent isn't here, reset to idle/waiting state
+      if (remoteUsers.length === 0) {
+        setGameState({
+            phase: 'idle',
+            dice: {},
+            currentTurnUid: '',
+            lastBid: null,
+            resultMessage: undefined
+        });
+        return;
+      }
+
       const remoteIds = remoteUsers.map(u => u.uid.toString());
       const allIds = [localUid, ...remoteIds].sort();
       
@@ -292,9 +324,9 @@ export default function RoomManager({ room, username, avatar }: Props) {
       const success = totalCount < bid.quantity; 
       
       const loserId = success ? bid.uid : localUid;
-      const winnerId = success ? localUid : bid.uid; // If I challenged and won, I win. If failed, Bidder wins.
+      const winnerId = success ? localUid : bid.uid; 
 
-      const loserName = (loserId === localUid ? username : (userInfo[loserId]?.username || 'Player'));
+      const loserName = (loserId === localUid ? username : (userInfo[loserId]?.username || 'Bidder'));
       const resultText = success 
         ? t.challengeWon(totalCount, bid.face, loserName)
         : t.challengeLost(totalCount, bid.face, loserName);
@@ -305,7 +337,7 @@ export default function RoomManager({ room, username, avatar }: Props) {
           total: totalCount, 
           face: bid.face, 
           loserName,
-          winnerUid: winnerId // Send winner ID
+          winnerUid: winnerId
       });
       await rtmChannel.current?.sendMessage({ text: msg });
 
