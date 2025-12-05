@@ -19,15 +19,23 @@ export default function Seat({ user, label, avatar, isLocal, isActive, className
   const videoRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (user && user.videoTrack) {
-      user.videoTrack.play(videoRef.current!);
+    // Ensure the DOM element exists before trying to play video
+    if (user && user.videoTrack && videoRef.current) {
+      user.videoTrack.play(videoRef.current);
     }
   }, [user]);
+
+  // Helper to determine if video should be shown
+  const showVideo = user?.hasVideo && user.videoTrack;
+
+  // Determine what to display (Emoji)
+  const displayAvatar = user ? (avatar || "👤") : "🪑";
 
   return (
     <div className={`absolute flex flex-col items-center gap-2 w-24 md:w-32 transition-all duration-500 ${className} ${isActive ? 'scale-110 z-30' : 'z-10'}`}>
       
-      {dice && (
+      {/* REVEALED DICE */}
+      {dice && !isLocal && (
          <div className="absolute -top-10 bg-black/80 px-2 py-1 rounded-lg border border-white/20 flex gap-1 shadow-xl z-50">
              {dice.map((d, i) => (
                  <span key={i} className="w-6 h-6 bg-white text-black text-xs font-bold flex items-center justify-center rounded">{d}</span>
@@ -35,31 +43,39 @@ export default function Seat({ user, label, avatar, isLocal, isActive, className
          </div>
       )}
 
-      {!dice && diceCount && diceCount > 0 && (
+      {/* HIDDEN DICE INDICATOR */}
+      {!dice && (diceCount || 0) > 0 && !isLocal && (
         <div className="absolute -top-8 flex gap-1 animate-bounce">
-          {Array.from({ length: diceCount }).map((_, i) => (
+          {Array.from({ length: diceCount || 0 }).map((_, i) => (
             <div key={i} className="w-3 h-3 md:w-4 md:h-4 bg-cyan-500 rounded-sm shadow-lg border border-black/50" title="Hidden Die" />
           ))}
         </div>
       )}
 
-      {isActive && (
-          <div className="absolute -bottom-12 text-cyan-400 font-bold text-xs bg-black/80 px-2 py-1 rounded animate-pulse border border-cyan-500/30">
+      {/* ACTIVE TURN INDICATOR */}
+      {isActive && !isLocal && (
+          <div className="absolute -bottom-12 text-cyan-400 font-bold text-xs bg-black/80 px-2 py-1 rounded animate-pulse border border-cyan-500/30 whitespace-nowrap">
               {t.thinking}
           </div>
       )}
 
-      <div className={`relative w-20 h-20 md:w-24 md:h-24 rounded-full border-4 ${isActive ? 'border-cyan-400 shadow-[0_0_20px_rgba(0,243,255,0.6)]' : (isLocal ? 'border-white/50' : 'border-white/10')} bg-black/40 backdrop-blur-sm overflow-hidden group`}>
-        {user?.hasVideo ? (
-           <div ref={videoRef} className="w-full h-full object-cover" />
-        ) : (
-           <div className="w-full h-full flex items-center justify-center text-4xl md:text-5xl select-none">
-             {user ? (avatar || "👤") : "🪑"}
-           </div>
+      <div className={`relative w-20 h-20 md:w-24 md:h-24 rounded-full border-4 ${isActive ? 'border-cyan-400 shadow-[0_0_20px_rgba(0,243,255,0.6)]' : (isLocal ? 'border-white/50' : 'border-white/10')} bg-gray-900 backdrop-blur-sm overflow-hidden group`}>
+        
+        {/* Avatar Layer (Large Background) */}
+        <div className="absolute inset-0 z-0 flex items-center justify-center text-4xl md:text-5xl select-none">
+          {displayAvatar}
+        </div>
+
+        {/* Video Layer (z-10: Renders on top if video exists) */}
+        {showVideo && (
+           <div ref={videoRef} className="absolute inset-0 w-full h-full object-cover bg-black z-10" />
         )}
       </div>
 
-      <div className={`px-3 py-1 rounded-full backdrop-blur-md border ${isActive ? 'bg-cyan-900/80 border-cyan-500' : 'bg-black/60 border-white/10'}`}>
+      {/* NAME TAG + AVATAR */}
+      <div className={`px-3 py-1 rounded-full backdrop-blur-md border flex items-center gap-1.5 ${isActive ? 'bg-cyan-900/80 border-cyan-500' : 'bg-black/60 border-white/10'}`}>
+        {/* Small Avatar beside name */}
+        <span className="text-sm select-none leading-none filter drop-shadow-md">{displayAvatar}</span>
         <span className={`text-xs font-bold ${isLocal ? 'text-cyan-400' : 'text-white'}`}>
           {label || t.emptySeat}
         </span>

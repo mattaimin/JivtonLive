@@ -34,7 +34,7 @@ export default function RoomManager({ room, username, avatar }: Props) {
   const client = useRef<IAgoraRTCClient | null>(null);
   const rtmClient = useRef<RtmClient | null>(null);
   const rtmChannel = useRef<RtmChannel | null>(null);
-  const audioRef = useRef<HTMLAudioElement>(null); // NEW: Audio Ref
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([]);
   const [userInfo, setUserInfo] = useState<UserInfoMap>({});
@@ -43,7 +43,8 @@ export default function RoomManager({ room, username, avatar }: Props) {
   const [localVideoTrack, setLocalVideoTrack] = useState<ICameraVideoTrack | undefined>(undefined);
   const [localAudioTrack, setLocalAudioTrack] = useState<IMicrophoneAudioTrack | undefined>(undefined);
   const [joined, setJoined] = useState(false);
-  const [isMusicPlaying, setIsMusicPlaying] = useState(false); // NEW: Audio State
+  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const [permissionError, setPermissionError] = useState(false);
 
   const [gameState, setGameState] = useState<GameState>({
     phase: 'idle',
@@ -51,6 +52,9 @@ export default function RoomManager({ room, username, avatar }: Props) {
     currentTurnUid: '',
     lastBid: null
   });
+  // Ref to access state inside event listeners
+  const gameStateRef = useRef(gameState);
+  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
 
   const getAllPlayerIds = () => {
     if (!localUid) return [];
@@ -58,7 +62,6 @@ export default function RoomManager({ room, username, avatar }: Props) {
     return ids.sort(); 
   };
 
-  // Audio Control
   const toggleMusic = () => {
     if (audioRef.current) {
       if (isMusicPlaying) {
@@ -75,12 +78,11 @@ export default function RoomManager({ room, username, avatar }: Props) {
     if (typeof window === 'undefined') return;
     let isMounted = true;
 
-    // Try to auto-play music on mount
     if (audioRef.current) {
-        audioRef.current.volume = 0.3; // Lower volume
+        audioRef.current.volume = 0.3;
         audioRef.current.play()
           .then(() => setIsMusicPlaying(true))
-          .catch(() => console.log("Autoplay blocked - waiting for user interaction"));
+          .catch(() => console.log("Autoplay blocked"));
     }
 
     const init = async () => {
@@ -102,12 +104,21 @@ export default function RoomManager({ room, username, avatar }: Props) {
 
         client.current.on('user-unpublished', (user, mediaType) => {
           if (mediaType === 'video') {
-             setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
+             setRemoteUsers(prev => [...prev]); 
           }
         });
 
         client.current.on('user-left', (user) => {
           setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
+          
+          // STOP GAME if opponent leaves
+          if (gameStateRef.current.phase === 'playing') {
+             setGameState(prev => ({
+                 ...prev,
+                 phase: 'revealed',
+                 resultMessage: "对手已离开，游戏结束。请等待玩家返回。(Opponent left. Game Over. Please wait.)"
+             }));
+          }
         });
 
         const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID!;
@@ -158,10 +169,8 @@ export default function RoomManager({ room, username, avatar }: Props) {
                 }));
             }
             else if (data.type === 'CHALLENGE') {
-                // Receive result from the challenger
                 const loserName = data.loserName; 
                 const success = data.success;
-                
                 const text = success 
                   ? t.challengeWon(data.total, data.face, loserName)
                   : t.challengeLost(data.total, data.face, loserName);
@@ -178,12 +187,24 @@ export default function RoomManager({ room, username, avatar }: Props) {
         members.forEach(m => fetchUserInfo(m));
 
         await client.current.join(appId, room.id, token, uidVal);
-        const [mic, cam] = await AgoraRTC.createMicrophoneAndCameraTracks();
         
-        if (!isMounted) { mic.close(); cam.close(); return; }
-        setLocalAudioTrack(mic);
-        setLocalVideoTrack(cam);
-        await client.current.publish([mic, cam]);
+        try {
+            const [mic, cam] = await AgoraRTC.createMicrophoneAndCameraTracks();
+            if (!isMounted) { 
+                mic.close(); cam.close(); return; 
+            }
+            
+            setLocalAudioTrack(mic);
+            setLocalVideoTrack(cam);
+            await client.current.publish([mic, cam]);
+        } catch (mediaErr: any) {
+            // This catches the permission error and triggers the UI popup
+            console.warn("Media permission failed:", mediaErr);
+            if (mediaErr.code === 'PERMISSION_DENIED' || mediaErr.name === 'NotAllowedError') {
+               setPermissionError(true);
+            }
+        }
+        
         setJoined(true);
 
       } catch (err) {
@@ -216,8 +237,6 @@ export default function RoomManager({ room, username, avatar }: Props) {
     };
   }, [room.id]);
 
-  // --- GAME ACTIONS ---
-
   const handleRollDice = async (uid: string) => {
       const newDice = Array.from({ length: 5 }, () => Math.floor(Math.random() * 6) + 1);
       setGameState(prev => ({ ...prev, dice: { ...prev.dice, [uid]: newDice } }));
@@ -226,6 +245,18 @@ export default function RoomManager({ room, username, avatar }: Props) {
   };
 
   const handleStartGame = async () => {
+      // Ensure we have opponents to play with
+      if (remoteUsers.length === 0) {
+          setGameState({
+            phase: 'idle',
+            dice: {},
+            currentTurnUid: '',
+            lastBid: null,
+            resultMessage: undefined
+          });
+          return;
+      }
+
       const remoteIds = remoteUsers.map(u => u.uid.toString());
       const allIds = [localUid, ...remoteIds].sort();
       
@@ -264,7 +295,6 @@ export default function RoomManager({ room, username, avatar }: Props) {
       }));
   };
 
-  // UPDATED: Correct Counting Logic
   const handleChallenge = async () => {
       if (!gameState.lastBid) return;
       
@@ -273,18 +303,14 @@ export default function RoomManager({ room, username, avatar }: Props) {
       
       Object.values(gameState.dice).forEach(hand => {
           hand.forEach(die => {
-              // FIX: If the bid is for 1s, then ONLY 1s count.
-              // If the bid is for anything else (e.g., 4s), then 4s AND 1s count (Wild).
-              if (die === targetFace) {
+              if (die === targetFace || (targetFace !== 1 && die === 1)) {
                   totalCount++;
-              } else if (targetFace !== 1 && die === 1) {
-                  totalCount++; // Wild
               }
           });
       });
 
       const bid = gameState.lastBid;
-      const success = totalCount < bid.quantity; // Challenge succeeds if actual count < bid
+      const success = totalCount < bid.quantity; 
       
       const loserName = success ? (userInfo[bid.uid]?.username || 'Bidder') : username;
       const resultText = success 
@@ -310,30 +336,47 @@ export default function RoomManager({ room, username, avatar }: Props) {
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black">
       <div className="absolute inset-0 bg-cover bg-center opacity-50" style={{ backgroundImage: `url(${room.theme.backgroundUrl})` }} />
-      
-      {/* Updated Audio Element with Ref */}
       <audio ref={audioRef} src={room.theme.audioUrl} loop className="hidden" />
 
+      {/* Permission Denied Modal (Chinese) */}
+      {permissionError && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-6">
+          <div className="bg-[#1F1F1F] p-6 rounded-2xl border border-red-500/30 shadow-2xl max-w-sm text-center">
+             <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+               <span className="text-3xl">📷</span>
+             </div>
+             <h3 className="text-xl font-bold text-white mb-2">需要摄像头权限</h3>
+             <p className="text-gray-400 text-sm mb-6">请在浏览器设置中允许访问摄像头以加入游戏。</p>
+             <button 
+               onClick={() => window.location.reload()}
+               className="w-full py-3 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition"
+             >
+               刷新页面
+             </button>
+          </div>
+        </div>
+      )}
+
       <div className="relative z-10 w-full h-full flex flex-col">
-        <div className="p-6 flex justify-between items-start">
+        
+        <div className="p-4 flex justify-between items-start">
            <div>
-             <h1 className="text-3xl font-black text-white drop-shadow-lg">{room.name}</h1>
+             <h1 className="text-2xl font-black text-white drop-shadow-lg">{room.name}</h1>
              <div className="flex items-center gap-2 mt-1">
                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-               <span className="text-sm text-gray-300 font-mono">{t.live} // {remoteUsers.length + 1} {t.players}</span>
+               <span className="text-xs text-gray-300 font-mono">{t.live} // {remoteUsers.length + 1} {t.players}</span>
              </div>
            </div>
            
            <div className="flex gap-2">
-              {/* NEW: Music Toggle Button */}
               <button 
                 onClick={toggleMusic}
-                className={`px-3 py-2 border rounded-lg font-bold transition ${isMusicPlaying ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400' : 'bg-gray-800/50 border-gray-600 text-gray-400'}`}
+                className={`px-3 py-1.5 border rounded-lg font-bold text-xs transition ${isMusicPlaying ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400' : 'bg-gray-800/50 border-gray-600 text-gray-400'}`}
               >
                 {isMusicPlaying ? '🎵 ON' : '🎵 OFF'}
               </button>
 
-              <button onClick={() => window.location.href = '/'} className="px-4 py-2 bg-red-500/20 hover:bg-red-500/40 border border-red-500 text-red-500 rounded-lg font-bold transition">
+              <button onClick={() => window.location.href = '/'} className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/40 border border-red-500 text-red-500 text-xs rounded-lg font-bold transition">
                 {t.leaveRoom}
               </button>
            </div>
@@ -343,7 +386,7 @@ export default function RoomManager({ room, username, avatar }: Props) {
           localUser={joined ? {
              uid: localUid,
              videoTrack: localVideoTrack,
-             hasVideo: !!localVideoTrack,
+             hasVideo: !!localVideoTrack, 
              username: username,
              avatar: avatar
           } : null}

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { RoomConfig } from '@/types';
 import { AVATARS } from '@/config/rooms';
+import { t } from '@/utils/i18n';
 
 interface Props {
   room: RoomConfig;
@@ -26,44 +27,41 @@ export default function JoinModal({ room, onClose }: Props) {
   }, []);
 
   const handleJoin = () => {
-    // 1. Validate Password
     if (room.password && password !== room.password) {
-      setError('Incorrect Password');
+      setError(t.incorrectPass);
       return;
     }
     if (!username.trim()) {
-      setError('Please enter a nickname');
+      setError(t.enterName);
       return;
     }
 
-    // 2. Save Identity
     localStorage.setItem('agora-party-username', username);
     localStorage.setItem('agora-party-avatar', selectedAvatar);
 
-    // 3. Navigate to Room
-    // FIX: We now pass the 'password' as a 'key' in the URL so the page can verify it
     const params = new URLSearchParams({
       name: username,
       avatar: selectedAvatar,
-      key: password // <--- SEND KEY
+      key: password // Pass key for verification
     });
     router.push(`/room/${room.id}?${params.toString()}`);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-[#0a0a0a] border border-[#333] rounded-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-6">
+      <div className="w-full max-w-sm bg-[#121212] border border-[#333] rounded-3xl overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
         
+        {/* Header */}
         <div 
           className="h-24 flex items-center justify-center relative overflow-hidden"
           style={{ background: `linear-gradient(135deg, ${room.theme.primaryColor}22, ${room.theme.accentColor}22)` }}
         >
-          <h2 className="text-3xl font-black text-white tracking-tighter relative z-10 drop-shadow-md">
+          <h2 className="text-2xl font-black text-white tracking-tighter relative z-10 drop-shadow-md">
             {room.name}
           </h2>
           <button 
             onClick={onClose}
-            className="absolute top-4 right-4 text-white/50 hover:text-white transition"
+            className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-black/20 text-white hover:bg-black/50 transition"
           >
             ✕
           </button>
@@ -71,19 +69,20 @@ export default function JoinModal({ room, onClose }: Props) {
 
         <div className="p-6 space-y-6">
           
+          {/* Avatar Selection */}
           <div>
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">Choose Avatar</label>
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">{t.chooseAvatar}</label>
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
               {AVATARS.map(av => (
                 <button
                   key={av}
                   onClick={() => setSelectedAvatar(av)}
-                  className={`w-12 h-12 text-2xl flex items-center justify-center rounded-full border-2 transition-all ${
+                  className={`w-14 h-14 text-3xl flex-shrink-0 flex items-center justify-center rounded-2xl border-2 transition-all ${
                     selectedAvatar === av 
-                      ? `bg-white/10 scale-110` 
+                      ? `bg-white/10 scale-105 border-[var(--primary)]` 
                       : 'border-transparent hover:bg-white/5'
                   }`}
-                  style={{ borderColor: selectedAvatar === av ? room.theme.primaryColor : 'transparent' }}
+                  style={{ '--primary': room.theme.primaryColor } as React.CSSProperties}
                 >
                   {av}
                 </button>
@@ -91,34 +90,35 @@ export default function JoinModal({ room, onClose }: Props) {
             </div>
           </div>
 
+          {/* Inputs */}
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Nickname</label>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">{t.nickname}</label>
               <input 
                 type="text" 
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-4 py-3 text-white focus:outline-none transition"
-                placeholder="CyberPunk_01"
-                style={{ borderColor: '#333' }} 
+                className="w-full bg-[#1a1a1a] border border-[#333] rounded-xl px-4 py-3.5 text-white focus:outline-none focus:border-[var(--primary)] transition"
+                style={{ '--primary': room.theme.primaryColor } as React.CSSProperties}
               />
             </div>
 
             {room.password && (
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Room Password</label>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">{t.roomPass}</label>
                 <input 
                   type="password" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-4 py-3 text-white focus:outline-none transition"
-                  placeholder="Enter code..."
+                  className="w-full bg-[#1a1a1a] border border-[#333] rounded-xl px-4 py-3.5 text-white focus:outline-none focus:border-[var(--primary)] transition"
+                  placeholder={t.enterPass}
+                  style={{ '--primary': room.theme.primaryColor } as React.CSSProperties}
                 />
               </div>
             )}
           </div>
 
-          {error && <p className="text-red-500 text-sm text-center font-medium">{error}</p>}
+          {error && <p className="text-red-500 text-sm text-center font-medium bg-red-500/10 py-2 rounded-lg">{error}</p>}
 
           <button
             onClick={handleJoin}
@@ -127,7 +127,7 @@ export default function JoinModal({ room, onClose }: Props) {
               background: `linear-gradient(to right, ${room.theme.primaryColor}, ${room.theme.accentColor})` 
             }}
           >
-            ENTER ROOM
+            {t.enterRoom}
           </button>
 
         </div>
